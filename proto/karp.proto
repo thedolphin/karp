@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+service Karp {
+    rpc Consume(stream Ack) returns (stream Message);
+}
+
+message Ack {
+    uint64 ID = 1;
+    string Topic = 2;
+    int32 Partition = 3;
+    int64 Offset = 4;
+}
+
+message MessageHeader {
+    bytes Key = 1;
+    bytes Value = 2;
+}
+
+message Message {
+    bool Done = 1;
+    uint64 ID = 2;
+    int64 Timestamp = 3;
+    bytes Key = 4;
+    bytes Value = 5;
+    string Topic = 6;
+    int32 Partition = 7;
+    int64 Offset = 8;
+    repeated MessageHeader Headers = 9;
+}

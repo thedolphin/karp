@@ -1,0 +1,25 @@
+FROM golang:1.24-alpine3.21 AS build
+
+WORKDIR /build/src/
+ENV GOPATH=/go
+
+COPY . .
+RUN --mount=type=cache,id=karp-go-cache,target=/go\
+ go mod tidy &&\
+ go build -trimpath -o /build/karpclient ./cmd/karpclient
+
+
+FROM alpine:3.21
+
+WORKDIR /app
+
+RUN set -ex &&\
+ addgroup -g 1000 app &&\
+ adduser -H -u 1000 -G app -s /bin/sh -D app &&\
+ apk upgrade &&\
+ apk add tzdata ca-certificates &&\
+ rm -rf /var/cache/apk/*
+
+COPY --from=build /build/karpclient /app/karpclient
+
+ENTRYPOINT [ "/app/karpclient" ]

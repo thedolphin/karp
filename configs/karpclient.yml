@@ -1,0 +1,104 @@
+---
+# Default Client ID
+# Parameter is used in kafka client configuraton on server:
+# member name will be "karp:<clientid>[<thread>]@<src.ip:port>"
+clientid: bridge
+
+# Logging level, one of: debug, info, warn, error
+loglevel: debug
+
+# Prometheus and pprof listen endpoint
+monitoring: ":8082"
+
+# Connection retry interval
+# retry: 5s
+
+# Destination Kafka clusters
+kafka:
+
+  # Name of cluster, will be used further
+  my_kafka_cluster:
+
+    brokers:
+      - kafka1:9092
+      - kafka2:9092
+      - kafka3:9092
+
+    # Turns on Idempotent Producer and WaitForAll acks, default false
+    # idempotent: false
+
+    # Use TLS
+    # tls: false
+
+    # Wether Kafka cluster uses SASL different from PLAIN: SCRAM-SHA-256 or SCRAM-SHA-512
+    # sasl: "PLAIN"
+
+    # Kafka user name
+    # user: ""
+
+    # Kafka user password
+    # password: ""
+
+# Source KARP endpoints
+karp:
+
+  # Name of karp server, will be used further
+  my_karp_server:
+
+    # Karp Server address
+    endpoint: "127.0.0.1:50051"
+
+    # Name of Kafka Cluster configured on Karp Server
+    cluster: main
+
+    # Consumer Group name
+    group: test_group
+
+    # Kafka user name
+    # user: ""
+
+    # Kafka user password
+    # password: ""
+
+    # Overrides Default Client ID
+    # clientid: ""
+
+    # Wether use TLS for connecting to Karp Server
+    tls: true
+
+    # Should we verify server certificate (false) ot trust it (true)
+    trust: true
+
+    # Client certificate, key and CA in PEM format for connecting to Karp Server using mtls
+    # clientcert: "--- BEGIN ..."
+    # clientkey: "--- BEGIN ..."
+    # rootca: "--- BEGIN ..."
+
+# Stream relays messages from named Karp Server to named Kafka cluster
+# Depending on the message flow rate, you can specify multiple topics 
+# within a single stream, set the number of connections (threads) within one stream,
+# or do both. Therefore, you do need to understand how topics and
+# partitions work — shocking, I know.
+
+# Definition of streams
+streams:
+
+  - source: my_karp_server
+    sink: my_kafka_cluster
+      # Map of topics to subscribe to,
+      # and their destination names.
+      # Empty means same name
+    topics:
+      my.topic: # as is
+      my.test.topic: copy.of.my.test.topic
+
+    # Repartition topics
+    # hash - repartition by key hash
+    # source - set partition as in source
+    # roundrobin - round-robin repartition
+    # partitioning: source
+
+    # Number of threads (connections, clients) per stream,
+    # each thread shares the pool of partitions
+    # threads: 1
+...

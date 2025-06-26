@@ -1,0 +1,58 @@
+---
+
+# GRPC Server listen endpoint
+listen: ":50051"
+
+# Use TLS on GRPC Server listen socket
+tls: true
+
+# If specified, these will be used; otherwise, a self-signed certificate will be generated.
+# cert: "--- BEGIN ..."
+# key: "--- BEGIN ..."
+
+# Prometheus and pprof listen endpoint
+monitoring: ":8081"
+
+# Logging level, one of: debug, info, warn, error
+loglevel: debug
+
+# The window is defined as the difference between the highest
+# message ID delivered to the client and the highest message
+# ID acknowledged by the client. If the client fails to
+# acknowledge enough messages to stay within the window,
+# message delivery is paused. This mechanism is designed to
+# reduce latency caused by the need to acknowledge every
+# individual message and to avoid TCP window overflow. 
+# If this pause exceeds the configured timeout, the connection is
+# closed. If the server has no messages to send, it will send
+# a ping every configured interval, which the client is expected to
+# acknowledge. To ensure proper operation through a proxy, the
+# configured timeout should be less than the proxy's timeout
+# minus ping interval multiplied by the window size, so that the
+# server closes the connection before the proxy does. The size
+# of the window can be roughly calculated by dividing the TCP 
+# window size configured on client host by maximum message size.
+
+# window: 4
+# ping: 5s
+# timeout: 15s
+
+# List of Kafka clusters
+clusters:
+
+  # Name of Kafka cluster, used in client connection
+  main:
+    brokers:
+      - kafka1:9092
+      - kafka2:9092
+      - kafka3:9092
+
+    # Wether Kafka cluster uses SASL different from PLAIN: SCRAM-SHA-256 or SCRAM-SHA-512
+    # sasl: "PLAIN"
+
+    # Wether Kafka cluster uses TLS
+    # tls: false
+
+    # Lua script for message scripting and processing
+    # script: configs/karpserver.lua
+...

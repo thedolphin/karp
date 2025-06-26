@@ -1,0 +1,33 @@
+FROM golang:1.24-bookworm AS build
+
+WORKDIR /build
+ENV GOPATH=/go
+
+RUN apt-get update && apt-get -y install gcc git make cmake
+
+RUN git clone https://github.com/ibireme/yyjson.git &&\
+ mkdir yyjson.build &&\
+ cd yyjson.build &&\
+ cmake ../yyjson &&\
+ make &&\
+ make install
+
+# RUN git clone https://luajit.org/git/luajit.git &&\
+RUN git clone https://github.com/LuaJIT/LuaJIT.git luajit &&\
+ cd luajit &&\
+ make &&\
+ make install
+
+RUN rm -rf yyjson yyjson.build luajit
+
+COPY . .
+
+RUN --mount=type=cache,id=karp-go-cache,target=/go\
+ go mod tidy &&\
+ CGO_CFLAGS='-I/usr/local/include -I/usr/local/include/luajit-2.1'\
+ CGO_LDFLAGS='/usr/local/lib/libyyjson.a /usr/local/lib/libluajit-5.1.a -lm'\
+ go build -trimpath ./cmd/karpserver &&\
+ go build -trimpath ./cmd/karpclient
+
+FROM scratch
+COPY --from=build ["/build/karpserver", "/build/karpclient", "/"]

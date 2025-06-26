@@ -1,0 +1,60 @@
+name: Build KARP binaries via Docker
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build binaries via Docker
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./build/package/Dockerfile.buildapp 
+        outputs: type=local,dest=./out
+        platforms: linux/amd64
+
+    - name: Upload to GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          out/karpserver
+          out/karpclient
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Login to DockerHub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Build and push karpserver image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: build/package/Dockerfile.karpserver
+        push: true
+        tags: |
+          dolphinthedocker/karpserver:latest
+          dolphinthedocker/karpserver:${{ github.ref_name }}
+
+    - name: Build and push karpclient image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: build/package/Dockerfile.karpclient
+        push: true
+        tags: |
+          dolphinthedocker/karpclient:latest
+          dolphinthedocker/karpclient:${{ github.ref_name }}

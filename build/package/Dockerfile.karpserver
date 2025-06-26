@@ -1,0 +1,47 @@
+FROM golang:1.24-alpine3.21 AS build
+
+WORKDIR /build
+ENV GOPATH=/go
+
+RUN apk upgrade &&\
+ apk add tzdata ca-certificates gcc musl-dev git make cmake
+
+# RUN git clone https://luajit.org/git/luajit.git &&\
+RUN git clone https://github.com/ibireme/yyjson.git &&\
+ mkdir yyjson.build &&\
+ cd yyjson.build &&\
+ cmake ../yyjson &&\
+ make &&\
+ make install
+
+RUN git clone https://github.com/LuaJIT/LuaJIT.git luajit &&\
+ cd luajit &&\
+ make &&\
+ make install
+
+RUN rm -rf yyjson yyjson.build luajit
+
+COPY . .
+
+RUN --mount=type=cache,id=karp-go-cache,target=/go\
+ go mod tidy &&\
+ CGO_CFLAGS='-I/usr/local/include -I/usr/local/include/luajit-2.1'\
+ CGO_LDFLAGS='/usr/local/lib/libyyjson.a /usr/local/lib/libluajit-5.1.a -lm -static-libgcc'\
+ go build -trimpath ./cmd/karpserver &&\
+ go build -trimpath ./cmd/karpclient
+
+
+FROM alpine:3.21
+
+WORKDIR /app
+
+RUN set -ex &&\
+ addgroup -g 1000 app &&\
+ adduser -H -u 1000 -G app -s /bin/sh -D app &&\
+ apk upgrade &&\
+ apk add tzdata ca-certificates &&\
+ rm -rf /var/cache/apk/*
+
+COPY --from=build /build/karpserver /app/karpserver
+
+ENTRYPOINT [ "/app/karpserver" ]
