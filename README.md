@@ -33,5 +33,5 @@ Protocol definition for other languages.
 
 # Docker images
 
-* [`karpserver`](https://hub.docker.com/repository/docker/dolphinthedocker/karpserver/)
-* [`karpclient`](https://hub.docker.com/repository/docker/dolphinthedocker/karpclient/)
+* [`karpserver`](https://hub.docker.com/repository/docker/thedolphin/karpserver/)
+* [`karpclient`](https://hub.docker.com/repository/docker/thedolphin/karpclient/)

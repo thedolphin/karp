@@ -46,8 +46,8 @@ jobs:
         file: build/package/Dockerfile.karpserver
         push: true
         tags: |
-          dolphinthedocker/karpserver:latest
-          dolphinthedocker/karpserver:${{ github.ref_name }}
+          thedolphin/karpserver:latest
+          thedolphin/karpserver:${{ github.ref_name }}
 
     - name: Build and push karpclient image
       uses: docker/build-push-action@v5
@@ -56,5 +56,5 @@ jobs:
         file: build/package/Dockerfile.karpclient
         push: true
         tags: |
-          dolphinthedocker/karpclient:latest
-          dolphinthedocker/karpclient:${{ github.ref_name }}
+          thedolphin/karpclient:latest
+          thedolphin/karpclient:${{ github.ref_name }}
