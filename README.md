@@ -1,6 +1,8 @@
 # **KA**fka g**RP**c bridge
 
-Motivation
+![karp logo](assets/KARP_LOGO.svg)
+
+# Motivation
 
 * Publishing Kafka clusters over HTTP (in this case, HTTP/2 and gRPC)
 * Synchronizing Kafka clusters across different data centers
