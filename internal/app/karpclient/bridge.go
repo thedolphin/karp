@@ -18,6 +18,8 @@ type Bridge struct {
 
 func (b *Bridge) Run(ctx context.Context) {
 
+	defer slog.Info("Bridge stopped", "number", b.streamIdx, "from", b.stream.Source, "to", b.stream.Sink)
+
 	kafkaConfig := Config.Kafka[b.stream.Sink]
 	saramaCfg := NewSaramaConfig(&kafkaConfig, b.stream.Partitioning)
 	producer, err := sarama.NewSyncProducer(kafkaConfig.Brokers, saramaCfg)
@@ -25,6 +27,13 @@ func (b *Bridge) Run(ctx context.Context) {
 		slog.Error("Error creating Kafka producer", "err", err)
 		return
 	}
+
+	defer func() {
+		slog.Info("Closing Kafka producer", "number", b.streamIdx, "from", b.stream.Source, "to", b.stream.Sink)
+		if err = producer.Close(); err != nil {
+			slog.Error("Closing Kafka producer", "err", err)
+		}
+	}()
 
 	karpConfig := Config.Karp[b.stream.Source]
 
@@ -53,7 +62,18 @@ func (b *Bridge) Run(ctx context.Context) {
 		return
 	}
 
+	defer func() {
+		slog.Info("Closing KARP consumer", "number", b.streamIdx, "from", b.stream.Source, "to", b.stream.Sink)
+		if err = consumer.Close(); err != nil {
+			slog.Error("Closing KARP consumer", "err", err)
+		}
+	}()
+
 	cancelCtx, cancel := context.WithCancel(ctx)
+	defer func() {
+		slog.Info("Stopping bridge", "number", b.streamIdx, "from", b.stream.Source, "to", b.stream.Sink)
+		cancel()
+	}()
 
 	slog.Info("Starting bridge", "number", b.streamIdx, "from", b.stream.Source, "to", b.stream.Sink)
 
@@ -86,12 +106,12 @@ func (b *Bridge) Run(ctx context.Context) {
 
 		if _, _, err := producer.SendMessage(message); err != nil {
 			slog.Error("Error producing message", "err", err)
-			break
+			return
 		}
 
 		if err = consumer.Commit(msg); err != nil {
 			slog.Error("Error commiting offsets", "err", err)
-			break
+			return
 		}
 
 		promProcessedMessages.WithLabelValues(
@@ -99,21 +119,6 @@ func (b *Bridge) Run(ctx context.Context) {
 			b.stream.Sink,
 			msg.Topic).Inc()
 	}
-
-	slog.Info("Stopping bridge", "number", b.streamIdx, "from", b.stream.Source, "to", b.stream.Sink)
-	cancel()
-
-	slog.Info("Closing KARP consumer", "number", b.streamIdx, "from", b.stream.Source, "to", b.stream.Sink)
-	if err = consumer.Close(); err != nil {
-		slog.Error("Closing KARP consumer", "err", err)
-	}
-
-	slog.Info("Closing Kafka producer", "number", b.streamIdx, "from", b.stream.Source, "to", b.stream.Sink)
-	if err = producer.Close(); err != nil {
-		slog.Error("Closing Kafka producer", "err", err)
-	}
-
-	slog.Info("Bridge stopped", "number", b.streamIdx, "from", b.stream.Source, "to", b.stream.Sink)
 }
 
 func NewBridge(stream *ConfigStream, streamIdx int) *Bridge {
