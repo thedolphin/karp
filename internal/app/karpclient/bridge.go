@@ -43,7 +43,7 @@ func (b *Bridge) Run(ctx context.Context) {
 		UseTLS:          karpConfig.UseTLS,
 		TrustServerCert: karpConfig.TrustServerCert,
 		ClientCertPEM:   karpConfig.ClientCertPEM,
-		ClientKeyPEM:    karpConfig.ClientCertPEM,
+		ClientKeyPEM:    karpConfig.ClientKeyPEM,
 		RootCAsPEM:      karpConfig.RootCAsPEM,
 		Cluster:         karpConfig.Cluster,
 		Group:           karpConfig.Group,
