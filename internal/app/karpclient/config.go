@@ -16,6 +16,7 @@ type ConfigStream struct {
 	Topics       map[string]string `yaml:"topics" env-required:"true"`
 	Partitioning string            `yaml:"partitioning"`
 	Threads      int               `yaml:"threads" env-default:"1"`
+	Compression  string            `yaml:"compression"`
 }
 
 type ConfigKafkaCluster struct {
@@ -39,6 +40,7 @@ type ConfigKarpServer struct {
 	Group           string `yaml:"group" env-required:"true"`    // client Consumer Group name
 	User            string `yaml:"user"`                         // Kafka user name
 	Password        string `yaml:"password"`                     // Kafka user password
+	Compression     string `yaml:"compression"`                  // Compression to be used within connnection: snappy, lz4, gzip, zstd
 }
 
 type ClientConfig struct {
@@ -135,9 +137,17 @@ func LoadConfig(configFile string) error {
 		if stream.Threads < 1 {
 			Config.Streams[streamIdx].Threads = 1
 		}
+
+		if len(stream.Compression) == 0 {
+			Config.Streams[streamIdx].Compression = Config.Karp[stream.Source].Compression
+		} else if !slices.Contains([]string{"snappy", "lz4", "gzip", "zstd"}, stream.Compression) {
+			return fmt.Errorf("'compression' expected to be 'snappy', 'lz4', 'gzip' or 'zstd', got: '%v' for stream #%v",
+				stream.Compression, streamIdx)
+		}
 	}
 
 	for name, kafka := range Config.Kafka {
+
 		if len(kafka.SaslMechanism) > 0 &&
 			!slices.Contains([]string{"PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512"}, kafka.SaslMechanism) {
 
@@ -147,6 +157,13 @@ func LoadConfig(configFile string) error {
 	}
 
 	for name, karp := range Config.Karp {
+
+		if len(karp.Compression) > 0 &&
+			!slices.Contains([]string{"snappy", "lz4", "gzip", "zstd"}, karp.Compression) {
+			return fmt.Errorf("'compression' expected to be 'snappy', 'lz4', 'gzip' or 'zstd', got: '%v' for karp server '%v'",
+				karp.Compression, name)
+		}
+
 		if len(karp.ClientID) == 0 {
 			karp.ClientID = Config.ClientID
 			Config.Karp[name] = karp
