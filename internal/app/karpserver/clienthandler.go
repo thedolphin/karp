@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/thedolphin/karp/internal/pkg/karputils"
 	"github.com/thedolphin/karp/pkg/karp"
 	"github.com/thedolphin/luarunner"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -91,13 +91,20 @@ func (kch *ClientHandler) serverStreamHandler() error {
 		select {
 		case msg, ok := <-kch.messages:
 			if !ok {
-				slog.Info("No more messages to send", "request-id", kch.requestId)
-				return io.EOF
+				slog.Info("No more messages to send, sending Done to client", "request-id", kch.requestId)
+				err = kch.stream.Send(&karp.Message{Done: true})
+				if err != nil {
+					slog.Error("Error sending Done to client",
+						"request-id", kch.requestId,
+						"client-id", kch.clientId,
+						"err", err)
+				}
+				return err
 			}
 
 			if lua != nil {
 
-				// luaProcess изменяет msg.Value, если необходимо
+				// luaProcess changes msg.Value if necessary
 				pass, err := luaProcess(lua, msg, kch.user, kch.group)
 				if err != nil {
 					slog.Error("Error filtering message: error executing script",
@@ -202,74 +209,50 @@ func (kch *ClientHandler) Serve(ctx context.Context) error {
 		kch.saramaCfg,
 	); err != nil {
 		slog.Error("Error creating consumer group", "request-id", kch.requestId, "err", err)
-		return status.Error(codes.Internal, "KARP Server Internal Error")
+		return status.Errorf(codes.Internal, "KARP Server Internal Error: Error creating consumer group: %v", err)
 	}
 
 	kch.messages = make(chan *sarama.ConsumerMessage, 128)
 	kch.consumerGroupHandler = NewConsumerGroupAggregatingHandler(kch.messages, kch.requestId)
 
-	serveCtx, serveCancel := context.WithCancelCause(ctx)
+	serveGrp, serveCtx := errgroup.WithContext(ctx)
+
 	kch.window = NewFlowWindow(serveCtx, Config.WindowSize, Config.Timeout)
 
-	wg := &sync.WaitGroup{}
-	wg.Add(2)
+	// client sends close -> kafka consumer stops -> server goroutine stops
+	// server goroutine stops -> kafka consumer stops -> clientStreamHandler HANGS waiting for client to close connection
 
-	go func() {
+	serveGrp.Go(func() error {
 		err := kch.clientStreamHandler()
 		slog.Debug("Client stream handler stopped", "err", err)
-		serveCancel(err)
-		wg.Done()
-	}()
+		return err
+	})
 
-	go func() {
+	serveGrp.Go(func() error {
 		err := kch.serverStreamHandler()
-
-		// if the stream is still open for sending
-		if kch.stream.Context().Err() == nil {
-
-			err := kch.stream.Send(&karp.Message{Done: true})
-			if err != nil {
-				slog.Error("Error sending Done to client",
-					"request-id", kch.requestId,
-					"client-id", kch.clientId,
-					"err", err)
-			}
-		}
-
 		slog.Debug("Server stream handler stopped", "err", err)
-		serveCancel(err)
+		return err
+	})
 
-		// unblock kafka group consumer handler
-		for range kch.messages {
-		}
+	serveGrp.Go(func() error {
+		err = kch.kafkaConsumer(serveCtx)
+		slog.Debug("Kafka consumer stopped", "err", err)
+		return err
+	})
 
-		wg.Done()
-	}()
+	err = serveGrp.Wait()
 
-	err = kch.kafkaConsumer(serveCtx)
-	slog.Debug("Kafka consumer stopped, waiting goroutines to finish", "err", err)
-
-	waitCtx, waitCancel := context.WithTimeout(context.Background(), Config.Timeout)
-
-	go func() {
-		wg.Wait()
-		waitCancel()
-	}()
-
-	<-waitCtx.Done()
-	if waitCtx.Err() == context.DeadlineExceeded {
-		slog.Warn("Deadline exceeded while waiting goroutines to finish")
-	}
-
-	// after we have received and committed the last ack
 	kch.consumer.Close()
 
-	err = context.Cause(serveCtx)
 	if err != nil &&
 		!errors.Is(err, io.EOF) && /* client sent END_STREAM */
 		!errors.Is(err, context.Canceled) /* SIGTERM */ {
+		// Hide wrapped TCP errors to avoid disclosing cluster configuration
+		if errors.Is(err, sarama.ErrOutOfBrokers) {
+			err = sarama.ErrOutOfBrokers
+		}
 		slog.Error("Error while handling client", "request-id", kch.requestId, "err", err)
-		return status.Error(codes.Internal, "KARP Server Internal Error")
+		return status.Errorf(codes.Internal, "KARP Server Internal Error: %v", err)
 	}
 
 	return nil

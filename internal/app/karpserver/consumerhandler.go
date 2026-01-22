@@ -45,8 +45,13 @@ func (h *ConsumerGroupAggregatingHandler) ConsumeClaim(session sarama.ConsumerGr
 		"partition", claim.Partition(),
 	)
 
+loop:
 	for msg := range claim.Messages() {
-		h.messages <- msg
+		select {
+		case h.messages <- msg:
+		case <-session.Context().Done():
+			break loop
+		}
 	}
 
 	slog.Debug("Stopped single partition consuming",
