@@ -23,14 +23,14 @@ type karpServer struct {
 func (s *karpServer) Consume(stream grpc.BidiStreamingServer[karp.Ack, karp.Message]) error {
 
 	requestId := s.reqestID.Add(1)
+	ctx := context.WithValue(s.ctx, "request-id", requestId)
 
 	var clientAddr string
-	p, ok := peer.FromContext(stream.Context())
-	if ok {
-		clientAddr = p.Addr.String()
+	if p, ok := peer.FromContext(stream.Context()); ok {
+		ctx = context.WithValue(s.ctx, "client", p.Addr.String())
 	}
 
-	slog.Info("New Consume request", "request-id", requestId, "client", clientAddr)
+	slog.InfoContext(ctx, "New Consume request")
 
 	md, ok := metadata.FromIncomingContext(stream.Context())
 	if !ok {
@@ -101,20 +101,25 @@ func (s *karpServer) Consume(stream grpc.BidiStreamingServer[karp.Ack, karp.Mess
 
 	saramaCfg.ClientID += "@" + clientAddr
 
-	handler := &ClientHandler{
-		clientId:  clientIdMd[0],
-		cluster:   clusterMd[0],
-		requestId: requestId,
-		group:     groupMd[0],
-		user:      user,
-		topics:    topicsMd,
+	handler := &KarpClientHandler{
+		client: &KarpClient{
+			clientId:  clientIdMd[0],
+			cluster:   clusterMd[0],
+			requestId: requestId,
+			group:     groupMd[0],
+			user:      user,
+			topics:    topicsMd,
+		},
 		stream:    stream,
 		saramaCfg: saramaCfg,
 	}
 
-	err := handler.Serve(s.ctx)
+	ctx = context.WithValue(ctx, "user", user)
+	ctx = context.WithValue(ctx, "group", groupMd[0])
 
-	slog.Info("Consume request complete", "request-id", requestId)
+	err := handler.Serve(ctx)
+
+	slog.InfoContext(ctx, "Consume request complete")
 	return err
 }
 
