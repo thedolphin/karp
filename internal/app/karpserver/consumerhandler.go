@@ -29,7 +29,9 @@ func (h *ConsumerGroupAggregatingHandler) Setup(session sarama.ConsumerGroupSess
 	var err error
 
 	if h.luaScript != "" {
+		h.luaVMs = make(map[string]map[int32]*luarunner.LuaRunner, len(claims))
 		for topic, partitions := range claims {
+			h.luaVMs[topic] = make(map[int32]*luarunner.LuaRunner, len(partitions))
 			for _, partition := range partitions {
 				h.luaVMs[topic][partition], err = luaInit(h.luaScript)
 				if err != nil {
@@ -56,6 +58,7 @@ func (h *ConsumerGroupAggregatingHandler) Cleanup(session sarama.ConsumerGroupSe
 		}
 	}
 
+	h.session = nil
 	return nil
 }
 

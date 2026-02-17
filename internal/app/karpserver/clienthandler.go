@@ -154,7 +154,7 @@ func (kch *KarpClientHandler) kafkaConsumer(ctx context.Context) error {
 			slog.Info("Consuming session stopped with no error", "request-id", kch.client.requestId)
 		}
 
-		// If the context is canceled, it means there's an error somewhere.
+		// If the context is canceled, it means there's an error somewhere else.
 		// Otherwise, it's a rebalance and we need to restart Consume().
 		if err = ctx.Err(); err != nil {
 			slog.Info("Consuming loop stopped", "request-id", kch.client.requestId)
@@ -175,20 +175,19 @@ func (kch *KarpClientHandler) Serve(ctx context.Context) error {
 		return status.Errorf(codes.Internal, "KARP Server Internal Error: Error creating consumer group: %v", err)
 	}
 
-	serveGrp, serveCtx := errgroup.WithContext(ctx)
+	clientCtx, serveCancel := context.WithCancelCause(ctx)
+	serveGrp, serveCtx := errgroup.WithContext(clientCtx)
 	kch.window = NewFlowWindow(serveCtx, Config.WindowSize, Config.Timeout)
 
 	luaScript, _ := LuaScripts[kch.client.cluster]
 	kch.consumerGroupHandler = NewConsumerGroupAggregatingHandler(kch.client, luaScript)
 
-	// client sends close -> kafka consumer stops -> server goroutine stops
-	// server goroutine stops -> kafka consumer stops -> clientStreamHandler HANGS waiting for client to close connection
-
-	serveGrp.Go(func() error {
+	// The client goroutine terminates after Consume() returns.
+	go func() {
 		err := kch.clientStreamHandler()
 		slog.Debug("Client stream handler stopped", "err", err)
-		return err
-	})
+		serveCancel(err)
+	}()
 
 	serveGrp.Go(func() error {
 		err := kch.serverStreamHandler()
@@ -203,6 +202,21 @@ func (kch *KarpClientHandler) Serve(ctx context.Context) error {
 	})
 
 	err = serveGrp.Wait()
+	if clientErr := context.Cause(clientCtx); clientErr != nil {
+		// The client-side error is likely the root cause
+		err = clientErr
+	} else {
+		// Wait for the client to send last ACKs and close
+		// connection after received Done message.
+		// This is done only for grace, as by this time kafka
+		// client is already closed.
+		t := time.NewTimer(Config.Timeout)
+		select {
+		case <-t.C:
+		case <-clientCtx.Done():
+		}
+		t.Stop()
+	}
 
 	kch.consumer.Close()
 
