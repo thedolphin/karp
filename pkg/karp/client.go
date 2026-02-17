@@ -85,10 +85,6 @@ func (kc *Client) Close() error {
 		return fmt.Errorf("error sending END_STREAM while closing gRPC connection: %w", err)
 	}
 
-	// unblock Consume and ensure it finished
-	for range kc.messages {
-	}
-
 	// catch the rest of messages
 	for err == nil {
 		_, err = kc.stream.Recv()
@@ -127,13 +123,15 @@ func (kc *Client) Consume(ctx context.Context) error {
 
 		// If this is an echo, send a reply.
 		if len(msg.Topic) == 0 {
+			// Echo message is not commited on server
+			// but moves flow window.
 			kc.Commit(msg)
 		} else {
-			kc.messages <- msg
-		}
-
-		if err := ctx.Err(); err != nil {
-			return nil
+			select {
+			case kc.messages <- msg:
+			case <-ctx.Done():
+				return nil
+			}
 		}
 	}
 }
