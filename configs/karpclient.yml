@@ -74,6 +74,11 @@ karp:
     # clientkey: "--- BEGIN ..."
     # rootca: "--- BEGIN ..."
 
+    # Request compression from Karp Server
+    # Can be overriden in streams
+    # Possible values: snappy, lz4, gzip, zstd
+    # compression: ""
+
 # Stream relays messages from named Karp Server to named Kafka cluster
 # Depending on the message flow rate, you can specify multiple topics 
 # within a single stream, set the number of connections (threads) within one stream,
@@ -101,4 +106,8 @@ streams:
     # Number of threads (connections, clients) per stream,
     # each thread shares the pool of partitions
     # threads: 1
+
+    # Per stream compression setting
+    # Possible values: snappy, lz4, gzip, zstd
+    # compression: ""
 ...

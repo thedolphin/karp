@@ -26,6 +26,7 @@ func main() {
 	maxprocs.Set()
 	karputils.SetupLogger()
 	karpclient.SetupPrometheus()
+	karputils.RegisterCompressors()
 
 	configFile := flag.String("config", "", "configuration file path")
 	flag.Parse()

@@ -43,6 +43,7 @@ type ClientConfig struct {
 	User            string   `yaml:"user"`                         // Kafka user name
 	Password        string   `yaml:"password"`                     // Kafka user password
 	Topics          []string `yaml:"topics" env-required:"true"`   // list of topics to subscribe
+	Compression     string   `yaml:"compression"`                  // Compression type: snappy, lz4, gzip, zstd
 }
 
 // Messages returns channel of *Message
@@ -84,10 +85,6 @@ func (kc *Client) Close() error {
 		return fmt.Errorf("error sending END_STREAM while closing gRPC connection: %w", err)
 	}
 
-	// unblock Consume and ensure it finished
-	for range kc.messages {
-	}
-
 	// catch the rest of messages
 	for err == nil {
 		_, err = kc.stream.Recv()
@@ -126,13 +123,15 @@ func (kc *Client) Consume(ctx context.Context) error {
 
 		// If this is an echo, send a reply.
 		if len(msg.Topic) == 0 {
+			// Echo message is not commited on server
+			// but moves flow window.
 			kc.Commit(msg)
 		} else {
-			kc.messages <- msg
-		}
-
-		if err := ctx.Err(); err != nil {
-			return nil
+			select {
+			case kc.messages <- msg:
+			case <-ctx.Done():
+				return nil
+			}
 		}
 	}
 }
@@ -224,8 +223,12 @@ func NewClientFromConn(cfg *ClientConfig, conn *grpc.ClientConn) (*Client, error
 	client := NewKarpClient(conn)
 
 	var err error
+	var callOpts []grpc.CallOption
+	if cfg.Compression != "" {
+		callOpts = append(callOpts, grpc.UseCompressor(cfg.Compression))
+	}
 
-	kc.stream, err = client.Consume(connCtx)
+	kc.stream, err = client.Consume(connCtx, callOpts...)
 	if err != nil {
 		conn.Close()
 		return nil, err

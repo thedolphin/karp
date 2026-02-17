@@ -49,6 +49,7 @@ func (b *Bridge) Run(ctx context.Context) {
 		Group:           karpConfig.Group,
 		User:            karpConfig.User,
 		Password:        karpConfig.Password,
+		Compression:     karpConfig.Compression,
 	}
 
 	karpClientConfig.Topics = make([]string, 0, len(b.stream.Topics))

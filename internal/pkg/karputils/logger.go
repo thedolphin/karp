@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 
 	"golang.org/x/term"
 )
@@ -57,4 +59,33 @@ func MessageFmt(id uint64, topic string, partition int32, offset int64) string {
 	} else {
 		return fmt.Sprintf("%v#PONG", id)
 	}
+}
+
+func ClaimFmt(claims map[string][]int32) string {
+
+	var s strings.Builder
+
+	f := true
+	for topic, partitions := range claims {
+		if f {
+			f = false
+		} else {
+			s.WriteByte(' ')
+		}
+
+		s.WriteString(topic)
+		s.WriteByte('(')
+
+		for i, partition := range partitions {
+			if i > 0 {
+				s.WriteByte(',')
+			}
+
+			s.WriteString(strconv.FormatInt(int64(partition), 10))
+		}
+
+		s.WriteByte(')')
+	}
+
+	return s.String()
 }

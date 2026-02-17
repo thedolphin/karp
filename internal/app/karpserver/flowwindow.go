@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const MaxDelta = ^uint64(0) >> 1
+const MaxDelta = ^uint64(0) >> 1 // 2^64/2-1
 
 type FlowWindow struct {
 	ctx     context.Context
@@ -20,7 +20,7 @@ type FlowWindow struct {
 func NewFlowWindow(ctx context.Context, maxDelta uint, timeout time.Duration) *FlowWindow {
 
 	if uint64(maxDelta) >= MaxDelta {
-		panic("maxDelta must be less than 2^63 to avoid wrap-around undefined behavior")
+		panic("maxDelta must be less than 2^63 to preserve correct wrap-around comparison")
 	}
 
 	fw := &FlowWindow{
@@ -42,9 +42,10 @@ func (fw *FlowWindow) Next() (uint64, error) {
 		fw.timer.Reset(fw.timeout)
 	}
 
+	defer fw.timer.Stop()
+
 	select {
 	case id := <-fw.ids:
-		fw.timer.Stop()
 		return id, nil
 
 	case <-fw.ctx.Done():
